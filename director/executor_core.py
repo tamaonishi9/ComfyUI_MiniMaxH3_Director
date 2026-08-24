@@ -31,6 +31,7 @@ from .plan import (
     DirectorPlan,
     plan_summary,
     prepare_segment_clip,
+    resolve_ref_image_size,
     ref_audios_to_dict,
     ref_videos_to_dict,
     reference_video_for_segment,
@@ -561,6 +562,7 @@ def execute_director_plan_core(
             ref_videos=ref_videos,
             ref_video_audios=ref_video_audios,
             ref_audios=ref_audios,
+            ref_image_size=resolve_ref_image_size(seg, plan),
         )
 
         trim_frames = 0
@@ -1037,7 +1039,8 @@ def execute_director_plan_core(
         if plan.export_mode != "all":
             continue
 
-        # Prefer exact cache; fall back to stale disk render (never gray gen canvas).
+        # Prefer exact cache; pipeline-stale disk render is ok. A different
+        # source video is rejected so v2v/rv2v can passthrough the new clip.
         cached = load_segment_cache(node_id, seg, plan)
         used_stale = False
         if cached is None:
