@@ -2345,7 +2345,7 @@ class MiniMaxH3DirectorEditor {
             </select>
             <label data-i18n="output.fpsLabel" data-i18n-title="tooltip.fps">帧率</label>
             <input type="number" class="bd-num" data-r="timeline-fps" min="1" max="240" step="0.01" value="24" style="width:64px" data-i18n-title="tooltip.timelineFps">
-            <span class="bd-out-audio-wrap hidden" data-r="out-audio-wrap" data-i18n-title="tooltip.audioMode">
+            <span class="bd-out-audio-wrap" data-r="out-audio-wrap" data-i18n-title="tooltip.audioMode">
                 <label data-i18n="output.audio.label">声音</label>
                 <select class="bd-select" data-r="out-audio-mode" style="max-width:120px">
                     <option value="generate" data-i18n="output.audio.generate">生成声音</option>
@@ -4130,7 +4130,14 @@ class MiniMaxH3DirectorEditor {
             this.outHint.textContent = showHint ? genLayoutHint(this.getTaskKey()) : "";
         }
         const isVideoEditTask = taskKey === "v2v" || taskKey === "rv2v";
-        this.outAudioWrap?.classList.toggle("hidden", !isVideoEditTask);
+        // audioMode is honored on every task, not just video edits: "mute" is the
+        // only way to stop segment continuity from pinning the previous audio tail
+        // as a reference block, which fl2v needs because a pinned audio ref shifts
+        // the timeline origin and then collides with its unmarked last_frame
+        // keyframe. Keep the selector visible everywhere and restrict only the
+        // "source" option, which needs a source video to pass through.
+        this.outAudioWrap?.classList.remove("hidden");
+        this.updateAudioModeOptions(isVideoEditTask);
         if (this.outExportMode) {
             this.outExportMode.disabled = (isBatch || isFl2v) && !showBatchExport;
             this.outExportMode.classList.toggle("hidden", (isBatch || isFl2v) && !showBatchExport);
@@ -5408,6 +5415,25 @@ class MiniMaxH3DirectorEditor {
             aspectRatio: CUSTOM_ASPECT_RATIO,
             multiple: mult,
         };
+    }
+
+    /**
+     * Enable "source" audio only where a source video exists to pass through.
+     *
+     * resolve_audio_mode() on the python side already downgrades "source" to
+     * "generate" outside v2v/rv2v, so offering it elsewhere would let the user
+     * pick a value that silently does nothing. "generate" and "mute" stay
+     * selectable on every task.
+     */
+    updateAudioModeOptions(allowSource) {
+        if (!this.outAudioMode) return;
+        const sourceOpt = this.outAudioMode.querySelector('option[value="source"]');
+        if (sourceOpt) sourceOpt.disabled = !allowSource;
+        if (!allowSource && normalizeAudioMode(this.outAudioMode.value) === "source") {
+            // Mirror the python fallback so the UI never shows an inert value.
+            this.outAudioMode.value = "generate";
+            this.onOutputField("audioMode", "generate");
+        }
     }
 
     updateOutputModeUI() {
