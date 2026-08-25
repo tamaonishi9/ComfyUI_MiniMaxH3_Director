@@ -306,7 +306,18 @@ def build_director_audio_outputs(
     log.info("Director audio mode: %s (task=%s)", mode, getattr(plan, "global_task_key", ""))
 
     if mode == AUDIO_MODE_MUTE:
-        return [empty_audio_dict(SILENT_SAMPLE_RATE) for _ in images_out], None
+        # Silence still needs a frame-aligned waveform, not a 0-sample one:
+        # SaveVideo mux (av.audio.stream.AudioStream.encode -> resampler filter
+        # graph push) fails with av.error.MemoryError on a zero-length frame.
+        outputs = []
+        for tensor in images_out:
+            n_frames = int(getattr(tensor, "shape", [0])[0] or 0)
+            outputs.append(
+                _pad_or_trim_audio_to_frames(
+                    None, frame_count=n_frames, fps=fps, sample_rate=SILENT_SAMPLE_RATE
+                )
+            )
+        return outputs, None
 
     # Prefer model audio only in generate mode.
     if mode == AUDIO_MODE_GENERATE and segment_audios:
