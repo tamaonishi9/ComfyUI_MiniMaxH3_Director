@@ -311,27 +311,8 @@ def _self_test_layout() -> None:
         raise RuntimeError("Director continuity layout self-test: interior times not increasing")
 
 
-def _is_cooperative_reader(init) -> bool:
-    """Return True for a foreign patch that only reads the layout it just built.
-
-    ComfyUI-SolAttn_triton wraps PackedLayout.__init__ to register the video span
-    of every layout that gets built. That wrapper calls the original __init__ first
-    and then only reads self.segments and the identity of self.position_ids. Its own
-    docstring says it registers the span "without mutating it", and it swallows every
-    exception so model construction cannot break.
-
-    Director rewrites values inside position_ids in place, which leaves both the
-    tensor identity and self.segments untouched. Layering Director on top of that
-    wrapper is therefore safe: SolAttn runs first through _layout_orig, Director
-    rewrites afterwards, and neither observes the other's changes.
-    """
-    qualname = getattr(init, "__qualname__", "") or ""
-    module = getattr(init, "__module__", "") or ""
-    return qualname.startswith("_patch_packed_layout.") and "SolAttn" in module
-
-
 def _classify_layout_owner() -> str | None:
-    """Return None, 'ours', 'foreign_mc', or 'foreign_other'."""
+    """Return None, 'ours', 'compatible_solattn', 'foreign_mc', or 'foreign_other'."""
     mm = _mm()
     init = getattr(getattr(mm, "PackedLayout", None), "__init__", None)
     if init is None:
@@ -340,9 +321,16 @@ def _classify_layout_owner() -> str | None:
         return "ours"
     if getattr(init, "_h3_motion_context_layout_patch", False):
         return "foreign_mc"
-    if _is_cooperative_reader(init):
-        # Layer on top of it rather than refusing; see _is_cooperative_reader.
-        return None
+    # SolAttn_triton only observes H3 PackedLayout construction. Its exact
+    # wrapper can safely remain underneath Director's continuity wrapper.
+    # Unknown wrappers are still rejected by the checks below.
+    module = str(getattr(init, "__module__", "")).replace("\\", "/")
+    qualname = getattr(init, "__qualname__", "")
+    if (
+        module.endswith("ComfyUI-SolAttn_triton._morton_h3")
+        and qualname == "_patch_packed_layout.<locals>.__init__"
+    ):
+        return "compatible_solattn"
     if getattr(init, "__name__", "") in {"_patched_init", "_director_layout_init"}:
         return "foreign_other"
     if hasattr(init, "__wrapped__"):
@@ -369,6 +357,8 @@ def ensure_layout_patch() -> bool:
             "already patched MiniMax H3 layout. Disable that custom node pack and "
             "restart ComfyUI — both packs cannot own PackedLayout.__init__."
         )
+    if owner == "compatible_solattn":
+        log.info("Director continuity: composing with SolAttn H3 layout observer")
     if owner == "foreign_other":
         raise RuntimeError(
             "Director continuity: another pack already patched MiniMax H3 "
