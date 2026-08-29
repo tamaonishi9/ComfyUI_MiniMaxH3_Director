@@ -16,7 +16,7 @@
 |------|------|
 | **多段时间轴** | 节点内上传视频，支持切分、均分、智能分镜分割（PySceneDetect）、追加；分割点可选中删除；可视化时间轴预览每段范围与缩略图 |
 | **多任务模式** | `task_type`：`t2v`（文生视频）、`i2v`（图生视频）、`fl2v`（首尾帧生视频）、`r2v`（参考主体生视频 / 素材组）、`v2v`（视频转视频）、`rv2v`（参考素材改视频） |
-| **首尾帧 (fl2v)** | 独立首尾帧时间轴：多组关键帧、「添加一组」上传首帧和/或尾帧（官方支持只传尾帧）；拖缘调时长；提示词写中间运动；支持「选择运行」只跑部分组 |
+| **首尾帧 (fl2v)** | 独立首尾帧时间轴：多组关键帧、「添加一组」可只写提示词（文生）、或上传首帧和/或尾帧（官方支持只传尾帧）；开「段间引导」并勾「引用上段」时，空组用上一段末尾 N 帧做运动/音频衔接；拖缘调时长；支持「选择运行」只跑部分组 |
 | **参考素材组 (r2v)** | fl2v 式分组 UI：上方「公共参数」共享参考图/音频与公共提示词（与每组提示词拼接）；每组可再挂图片1–9 / 音频1–3 / 视频1–3；提示词用 `<Picture N>` / `<Video K>` / `<Audio J>`（或 `@` 引用）；时间轴预览与选中状态同步 |
 | **源视频编辑 (v2v / rv2v)** | Bernini 风格源视频时间轴；每段源画面自动绑定 `<Video 1>`；`rv2v` 另可挂参考图（图片1–9）与参考音频（音频1–3） |
 | **选择运行** | 开启后只采样勾选的片段/素材组；未勾选段可用缓存或源画面填充（全部导出时） |
@@ -25,6 +25,8 @@
 | **段间引导** | 默认关闭；多段 `t2v` / `i2v` / `fl2v` / `r2v` / `v2v` / `rv2v` 时可开启，将上一段生成结果的末尾运动（及生成音频）钉入下一段采样再裁掉前缀。上下文帧数：5 / 22 / 39 / 56，**默认推荐为 22**。**感谢 [ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context) 提供的实现思路** |
 | **二采 / 放大 (Refine)** | 外接 **MiniMax H3 Director Refine** 到导演台 `refine` 口。未接线 = 原来的单次采样。`refine` = 同分辨率精修；`upscale` = 先放大到目标画布再按 SIGMAS 二采（像素插值 / RTX VSR / H3 latent）；`latent_upscale` = 只放大 H3 latent、不二采。`passes` 可多次精修（upscale 只放大一次）。可选接 `refine_model` 换二采 UNET。`images` 为二采后成片，`images_pre_refine` 为一采（放大前）画面 |
 | **运行报告** | `report` 口输出分段计划、每段任务摘要 |
+
+参考音频槽可直接选择已有视频，或从本地选择音频/视频；视频会立即提取首条音轨为 FLAC，结果直接保存到 `input/`。本地视频只在临时目录中用于提取，不会作为视频素材保存。音频沿用 ComfyUI 现有上传规则：同名同内容直接复用，同名不同内容自动添加序号且不会覆盖；当前素材组也不会重复添加同一路径。
 
 ### 输入 / 输出
 
@@ -35,6 +37,8 @@
 
 > CLIP Loader 的 **type 必须选 `minimax`**（Qwen3-VL）。  
 > `t2v` / `i2v` / `fl2v` 用 **fl2va** UNET；`r2v` / `v2v` / `rv2v` 用 **ref2va** UNET。
+
+`输出原片到 source_images` 只填充独立的 `source_images` 输出，不会改变主 `images`。请将 `source_images` 另接预览或视频合成节点查看；解码失败时运行报告会明确说明，并输出灰色占位而不会冒充生成画面。
 
 ## 依赖
 
@@ -116,9 +120,10 @@ pip install -r ComfyUI_MiniMaxH3_Director/requirements.txt
 ### 首尾帧 fl2v 用法摘要
 
 1. 任务类型选 **「首尾帧生视频 (fl2v)」**
-2. 点击「添加一组」，上传首帧和/或尾帧（可只传尾帧）
-3. 在镜卡片或时间轴上调整时长；提示词写中间运动 / 镜头 / 过渡
-4. Queue 生成；多组可勾选「选择运行」只跑部分组
+2. 点击「添加一组」：可只写提示词（文生）；或上传首帧和/或尾帧（可只传尾帧；仅首帧=图生）
+3. 多组时打开「段间引导」并勾「引用上段」，空组会用上一段末尾 N 帧（上下文帧数，默认 22）引导衔接
+4. 在镜卡片或时间轴上调整时长；提示词写中间运动 / 镜头 / 过渡
+5. Queue 生成；多组可勾选「选择运行」只跑部分组
 
 ### 参考主体 r2v 用法摘要
 
@@ -140,7 +145,7 @@ pip install -r ComfyUI_MiniMaxH3_Director/requirements.txt
 2. `mode=refine`：同分辨率再采一遍（精修）。`mode=upscale`：先放大到目标画布再二采。`mode=latent_upscale`：只放大 H3 视频 latent，不再二采。分辨率控件在 `upscale` / `latent_upscale` 时显示（可跟随导演台、按比例+百万像素，或自定义宽高）。导演台是一采分辨率，Refine 目标才是放大后的宽高
 3. `passes`：精修次数，默认 1、最多 9999。`upscale` 只在第 1 次放大，后面都是同分辨率精修；`latent_upscale` 不二采
 4. 可选接 `refine_model`（二采 UNET）；不接则用导演台主模型。适合一采挂 Turbo LoRA、二采卸掉或换另一套
-5. 导演台 `images` 是二采后成片；`images_pre_refine` 是一采、放大前的画面，便于对比。`source_images` 仍是时间轴原片，不是一采结果
+5. 导演台 `images` 是二采后成片；`images_pre_refine` 是一采、放大前的画面，便于对比。`source_images` 仍是时间轴原片，不是一采结果。开启 `confirm_first_pass` 后，首次 Queue 只输出 `images_pre_refine` 并阻断主 `images` 下游保存；再次 Queue 命中缓存并完成二采后，`images` 才输出
 6. 二采用 SIGMAS：把 `BasicScheduler` 或 `ManualSigmas` 接到 Refine 的 `sigmas` 口
 7. fl2v 默认跳过二采（保护钉死的首尾帧）；关掉 Refine 上的 `skip_fl2v` 才会采
 8. `upscale` 默认 `h3_latent`：在 Refine 节点里选 3D 权重（`upscale_method` 下方下拉框；`mode=latent_upscale` 时同样出现）。权重放 `ComfyUI/models/latent_upscale_models/`。`lanczos` 可另接 `upscale_model`（RealESRGAN 等），不接则纯插值；也可改 `nvidia_rtx_vsr`
