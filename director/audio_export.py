@@ -3,6 +3,8 @@
 Prefers model-generated audio from AV latent decode; falls back to source-video extract.
 """
 
+# 変更表示（2026年、tamas ブランチ）: ミュート出力を映像のフレーム長に合わせて修正。
+
 from __future__ import annotations
 
 import logging

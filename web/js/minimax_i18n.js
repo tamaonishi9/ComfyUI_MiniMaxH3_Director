@@ -1,4 +1,5 @@
 /** MiniMax H3 Director UI i18n (zh / en) with localStorage persistence. */
+// 変更表示（2026年、tamas ブランチ）: 音声モードの説明文を更新。
 
 export const LOCALE_STORAGE_KEY = "mmx_director_ui_locale";
 

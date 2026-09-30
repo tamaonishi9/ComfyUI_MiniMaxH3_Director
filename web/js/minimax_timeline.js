@@ -1,3 +1,4 @@
+// 変更表示（2026年、tamas ブランチ）: 全タスクの音声モード表示と選択制御を変更。
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import {
